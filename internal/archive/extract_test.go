@@ -27,20 +27,23 @@ func TestExtractSupportedFormatsAndCommonRoot(t *testing.T) {
 	payload := []testEntry{{name: "wrapper/LICENSE", body: []byte("license")}}
 	innerTarGz := makeTar(t, []testEntry{{name: "LICENSE", body: []byte("gem license")}}, "gzip")
 	formats := map[string][]byte{
-		"zip":    makeZIP(t, payload),
-		"jar":    makeZIP(t, payload),
-		"tar":    makeTar(t, payload, "tar"),
-		"tar.gz": makeTar(t, payload, "gzip"),
-		"tar.xz": makeTar(t, payload, "xz"),
-		"gem": makeTar(t, []testEntry{
+		"archive.zip":    makeZIP(t, payload),
+		"archive.jar":    makeZIP(t, payload),
+		"archive.whl":    makeZIP(t, payload),
+		"archive.nupkg":  makeZIP(t, payload),
+		"archive.egg":    makeZIP(t, payload),
+		"archive.tar":    makeTar(t, payload, "tar"),
+		"archive.tar.gz": makeTar(t, payload, "gzip"),
+		"archive.tar.xz": makeTar(t, payload, "xz"),
+		"archive.gem": makeTar(t, []testEntry{
 			{name: "metadata.gz", body: []byte("metadata")},
 			{name: "data.tar.gz", body: innerTarGz},
 		}, "tar"),
 	}
-	for name, data := range formats {
-		t.Run(name, func(t *testing.T) {
+	for archiveName, data := range formats {
+		t.Run(archiveName, func(t *testing.T) {
 			archivePath := writeArchive(t, data)
-			result, err := Extract(context.Background(), archivePath, t.TempDir(), DefaultExtractLimits())
+			result, err := Extract(context.Background(), archivePath, archiveName, t.TempDir(), DefaultExtractLimits())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,7 +64,7 @@ func TestExtractDoesNotStripMixedRoots(t *testing.T) {
 		{name: "wrapper/LICENSE", body: []byte("license")},
 		{name: "README", body: []byte("readme")},
 	})
-	result, err := Extract(context.Background(), writeArchive(t, data), t.TempDir(), DefaultExtractLimits())
+	result, err := Extract(context.Background(), writeArchive(t, data), "archive.zip", t.TempDir(), DefaultExtractLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +78,7 @@ func TestExtractRejectsTraversal(t *testing.T) {
 	for _, name := range []string{"../escape", "/absolute", "..\\escape", "C:\\escape"} {
 		t.Run(name, func(t *testing.T) {
 			data := makeZIP(t, []testEntry{{name: name, body: []byte("bad")}})
-			_, err := Extract(context.Background(), writeArchive(t, data), t.TempDir(), DefaultExtractLimits())
+			_, err := Extract(context.Background(), writeArchive(t, data), "archive.zip", t.TempDir(), DefaultExtractLimits())
 			if KindOf(err) != KindInvalid {
 				t.Fatalf("error = %v, kind = %q", err, KindOf(err))
 			}
@@ -86,7 +89,7 @@ func TestExtractRejectsTraversal(t *testing.T) {
 func TestExtractRejectsTarTraversal(t *testing.T) {
 	t.Parallel()
 	data := makeTar(t, []testEntry{{name: "../escape", body: []byte("bad")}}, "tar")
-	_, err := Extract(context.Background(), writeArchive(t, data), t.TempDir(), DefaultExtractLimits())
+	_, err := Extract(context.Background(), writeArchive(t, data), "archive.tar", t.TempDir(), DefaultExtractLimits())
 	if KindOf(err) != KindInvalid {
 		t.Fatalf("error = %v, kind = %q", err, KindOf(err))
 	}
@@ -123,7 +126,7 @@ func TestExtractLimits(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			limits := test.limits(DefaultExtractLimits())
-			_, err := Extract(context.Background(), writeArchive(t, makeZIP(t, test.entries)), t.TempDir(), limits)
+			_, err := Extract(context.Background(), writeArchive(t, makeZIP(t, test.entries)), "archive.zip", t.TempDir(), limits)
 			if KindOf(err) != KindLimit {
 				t.Fatalf("error = %v, kind = %q", err, KindOf(err))
 			}
@@ -140,7 +143,7 @@ func TestExtractSkipsLinksAndSpecialEntries(t *testing.T) {
 		{name: "device", typeflag: tar.TypeChar},
 		{name: "socket", typeflag: tar.TypeFifo},
 	}, "tar")
-	result, err := Extract(context.Background(), writeArchive(t, data), t.TempDir(), DefaultExtractLimits())
+	result, err := Extract(context.Background(), writeArchive(t, data), "archive.tar", t.TempDir(), DefaultExtractLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +159,7 @@ func TestExtractSkipsLinksAndSpecialEntries(t *testing.T) {
 
 func TestExtractUnsupported(t *testing.T) {
 	t.Parallel()
-	_, err := Extract(context.Background(), writeArchive(t, []byte("not an archive")), t.TempDir(), DefaultExtractLimits())
+	_, err := Extract(context.Background(), writeArchive(t, []byte("not an archive")), "archive", t.TempDir(), DefaultExtractLimits())
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("error = %v, kind = %q", err, KindOf(err))
 	}

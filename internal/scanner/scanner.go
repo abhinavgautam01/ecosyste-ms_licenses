@@ -10,7 +10,9 @@ import (
 	"io"
 	"io/fs"
 	"math"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -111,7 +113,13 @@ func (s *Scanner) ScanURL(ctx context.Context, rawURL string) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	extracted, err := archivepkg.Extract(ctx, archivePath, filepath.Join(temporary, "extracted"), s.ExtractLimits)
+	extracted, err := archivepkg.Extract(
+		ctx,
+		archivePath,
+		archiveNameFromURL(rawURL),
+		filepath.Join(temporary, "extracted"),
+		s.ExtractLimits,
+	)
 	if err != nil {
 		return Report{}, err
 	}
@@ -124,6 +132,18 @@ func (s *Scanner) ScanURL(ctx context.Context, rawURL string) (Report, error) {
 	}
 	sortReport(&report)
 	return report, nil
+}
+
+func archiveNameFromURL(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "archive"
+	}
+	name := path.Base(parsed.Path)
+	if name == "." || name == "/" || name == "" {
+		return "archive"
+	}
+	return name
 }
 
 func (s *Scanner) validate() error {

@@ -51,8 +51,9 @@ type extractBudget struct {
 }
 
 // Extract expands archivePath beneath destination and returns the scan root.
+// archiveName is the logical filename used to select the archive format.
 // ZIP/JAR, tar, tar.gz, tar.xz, and Ruby gem containers are supported.
-func Extract(ctx context.Context, archivePath, destination string, limits ExtractLimits) (ExtractResult, error) {
+func Extract(ctx context.Context, archivePath, archiveName, destination string, limits ExtractLimits) (ExtractResult, error) {
 	if err := validateExtractLimits(limits); err != nil {
 		return ExtractResult{}, wrap(KindInvalid, "validate extraction limits", err)
 	}
@@ -62,22 +63,11 @@ func Extract(ctx context.Context, archivePath, destination string, limits Extrac
 	if err := os.MkdirAll(destination, 0o700); err != nil {
 		return ExtractResult{}, wrap(KindExtract, "create extraction root", err)
 	}
-	reader, members, err := openArchive(ctx, archivePath, filepath.Base(archivePath))
+	reader, members, err := openArchive(ctx, archivePath, archiveName)
 	if err != nil {
 		return ExtractResult{}, err
 	}
 	defer func() { _ = reader.Close() }()
-
-	// A Ruby gem is a tar envelope containing data.tar.gz. The downloaded
-	// temporary file has no useful extension, so reopen that envelope with the
-	// semantic name expected by git-pkgs/archives after inspecting its listing.
-	if isGemEnvelope(members) {
-		_ = reader.Close()
-		reader, members, err = openArchive(ctx, archivePath, "archive.gem")
-		if err != nil {
-			return ExtractResult{}, err
-		}
-	}
 
 	budget := &extractBudget{limits: limits}
 	root := filepath.Join(destination, "contents")
@@ -183,20 +173,6 @@ func archiveOpenError(err error) error {
 		return wrap(KindUnsupported, "open archive", err)
 	}
 	return wrap(KindInvalid, "open archive", err)
-}
-
-func isGemEnvelope(members []archives.FileInfo) bool {
-	metadata := false
-	payload := false
-	for _, member := range members {
-		switch path.Clean(strings.ReplaceAll(member.Path, "\\", "/")) {
-		case "metadata.gz":
-			metadata = true
-		case "data.tar.gz":
-			payload = true
-		}
-	}
-	return metadata && payload
 }
 
 func validateExtractLimits(limits ExtractLimits) error {

@@ -247,6 +247,21 @@ func TestScanURLExistingFixtures(t *testing.T) {
 	}
 }
 
+func TestArchiveNameFromURL(t *testing.T) {
+	t.Parallel()
+	tests := map[string]string{
+		"https://example.test/releases/package-1.0.0.gem?token=ignored#fragment": "package-1.0.0.gem",
+		"https://example.test/files/package%2Ewhl":                               "package.whl",
+		"https://example.test/":                                                  "archive",
+		"%":                                                                      "archive",
+	}
+	for rawURL, expected := range tests {
+		if actual := archiveNameFromURL(rawURL); actual != expected {
+			t.Errorf("archiveNameFromURL(%q) = %q, want %q", rawURL, actual, expected)
+		}
+	}
+}
+
 func TestScanURLFixtureArchive(t *testing.T) {
 	data := makeScannerZIP(t, map[string][]byte{
 		"wrapper/LICENSE": []byte(mitLicense),
